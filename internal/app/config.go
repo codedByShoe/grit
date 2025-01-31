@@ -8,7 +8,7 @@ import (
 )
 
 type database struct {
-	Url string
+	Name string
 }
 
 type session struct {
@@ -38,7 +38,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg := &Config{
 		Database: database{
-			Url: os.Getenv("DATABASE_URL"),
+			Name: os.Getenv("DB_NAME"),
 		},
 		Session: session{
 			ApplicationKey: os.Getenv("APP_KEY"),

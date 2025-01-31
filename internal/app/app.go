@@ -1,29 +1,42 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"html/template"
+	"net/http"
+	"time"
 
-	"github.com/codedbyshoe/grit/internal/model"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gorilla/csrf"
 	"github.com/petaki/inertia-go"
+	"gorm.io/gorm"
 )
 
-func Run() error {
-	cfg, err := LoadConfig()
+type Application struct {
+	Config  *Config
+	DB      *gorm.DB
+	Inertia *inertia.Inertia
+	Ctx     context.Context
+}
+
+func NewApplication() *Application {
+	config, err := LoadConfig()
 	if err != nil {
-		return err
+		panic("could not load config")
 	}
+	db := InitializeDatabase(config.Database.Name)
+	inertia := inertia.New(config.Server.Url, config.Server.Template, "")
 
-	app := fiber.New()
+	return &Application{
+		Config:  config,
+		DB:      db,
+		Inertia: inertia,
+		Ctx:     context.Background(),
+	}
+}
 
-	db := InitializeDatabase(cfg.Database.Url)
-
-	db.AutoMigrate(&model.User{}, &model.Session{})
-
-	inertiaManager := inertia.New(cfg.Server.Url, cfg.Server.Template, "")
-
-	inertiaManager.ShareFunc("assets", func() template.HTML {
+func (a *Application) Run() error {
+	a.Inertia.ShareFunc("assets", func() template.HTML {
 		return template.HTML(`
         <link rel="stylesheet" href="/dist/css/style.css"></link>
         <script src="/dist/main.js" defer></script>
@@ -32,7 +45,16 @@ func Run() error {
       `)
 	})
 
-	InitializeRoutes(app, inertiaManager)
+	CSRF := csrf.Protect([]byte(a.Config.Session.ApplicationKey))
 
-	return app.Listen(fmt.Sprintf(":%s", cfg.Server.Port))
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%s", a.Config.Server.Port),
+		Handler:      CSRF(a.InitializeRoutes()),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+
+	fmt.Printf("🚀 Application running at http://localhost:%s", server.Addr)
+	return server.ListenAndServe()
 }

@@ -3,23 +3,24 @@ package app
 import (
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/adaptor"
-	"github.com/gofiber/fiber/v2/middleware/csrf"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/monitor"
-	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/petaki/inertia-go"
+	"github.com/codedbyshoe/grit/internal/handler"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
-func InitializeRoutes(app *fiber.App, inertia *inertia.Inertia) {
-	app.Use(logger.New())
-	app.Use(recover.New())
-	app.Use(csrf.New())
-	app.Get("/", adaptor.HTTPHandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		inertia.Render(w, r, "Welcome", nil)
-	}))
-	app.Get("/metrics", monitor.New())
+func (a *Application) InitializeRoutes() *chi.Mux {
+	r := chi.NewRouter()
 
-	app.Static("/dist", "dist")
+	wh := handler.NewWelcomeHandler(a.Inertia)
+
+	r.Use(
+		middleware.Logger,
+		middleware.Recoverer,
+	)
+	r.Mount("/", wh)
+
+	fileServer := http.FileServer(http.Dir("./dist"))
+	r.Handle("/dist/*", http.StripPrefix("/dist/", fileServer))
+
+	return r
 }
