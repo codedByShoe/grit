@@ -2,8 +2,9 @@ package app
 
 import (
 	"fmt"
-	"net/http"
-	"time"
+
+	"github.com/codedbyshoe/grit/internal/model"
+	"github.com/gofiber/fiber/v2"
 )
 
 func Run() error {
@@ -12,22 +13,13 @@ func Run() error {
 		return err
 	}
 
-	r := InitializeRouter()
+	app := fiber.New()
 
-	// setup Server
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.ServerConfig.Port),
-		Handler:      r,
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-	}
+	db := InitializeDatabase(cfg.Database.Url)
 
-	// run server
-	fmt.Printf("🚀 Application running at %s:%d \n", cfg.ServerConfig.Url, cfg.ServerConfig.Port)
-	err = server.ListenAndServe()
-	if err != nil {
-		return err
-	}
-	return nil
+	db.AutoMigrate(&model.User{}, &model.Session{})
+
+	InitializeRoutes(app)
+
+	return app.Listen(fmt.Sprintf(":%s", cfg.Server.Port))
 }
