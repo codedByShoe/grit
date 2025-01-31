@@ -16,9 +16,10 @@ type session struct {
 }
 
 type server struct {
-	Url  string
-	Port string
-	Env  string
+	Url      string
+	Port     string
+	Env      string
+	Template string
 }
 
 type Config struct {
@@ -33,6 +34,8 @@ func LoadConfig() (*Config, error) {
 		log.Fatal("Error loading .env file")
 	}
 
+	wd, _ := os.Getwd()
+
 	cfg := &Config{
 		Database: database{
 			Url: os.Getenv("DATABASE_URL"),
@@ -41,9 +44,10 @@ func LoadConfig() (*Config, error) {
 			ApplicationKey: os.Getenv("APP_KEY"),
 		},
 		Server: server{
-			Url:  os.Getenv("URL"),
-			Port: os.Getenv("PORT"),
-			Env:  os.Getenv("ENVIRONMENT"),
+			Url:      os.Getenv("URL"),
+			Port:     os.Getenv("PORT"),
+			Env:      os.Getenv("ENVIRONMENT"),
+			Template: wd + "/client/app.html",
 		},
 	}
 
