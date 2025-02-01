@@ -1,11 +1,12 @@
 package middleware
 
 import (
+	"context"
 	"encoding/base64"
+	"net/http"
 	"strings"
 
 	"github.com/codedbyshoe/grit/internal/model"
-	"github.com/gofiber/fiber/v2"
 )
 
 type AuthMiddleware struct {
@@ -24,55 +25,54 @@ type UserContextKey string
 
 var UserKey UserContextKey = "user"
 
-// RequireGuest ensures that the user is not authenticated (guest)
-func (m *AuthMiddleware) RequireGuest() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		_, ok := m.hasValidCookie(c)
+func (m *AuthMiddleware) RequireGuest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, ok := m.hasValidCookie(r)
 		if ok {
-			return c.Redirect("/", fiber.StatusSeeOther)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
 		}
-		return c.Next()
-	}
+		next.ServeHTTP(w, r)
+	})
 }
 
-// RequireAuth ensures that the user is authenticated
-func (m *AuthMiddleware) RequireAuth() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		_, ok := m.hasValidCookie(c)
+func (m *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, ok := m.hasValidCookie(r)
 		if !ok {
-			return c.Redirect("/auth", fiber.StatusSeeOther)
+			http.Redirect(w, r, "/auth", http.StatusSeeOther)
+			return
 		}
-		return c.Next()
-	}
+		next.ServeHTTP(w, r)
+	})
 }
 
-// AddUserToContext adds the authenticated user to the request context
-func (m *AuthMiddleware) AddUserToContext() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		user, ok := m.hasValidCookie(c)
+func (m *AuthMiddleware) AddUserToContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := m.hasValidCookie(r)
 		if !ok {
-			return c.Next()
+			next.ServeHTTP(w, r)
+			return
 		}
+		ctx := context.WithValue(r.Context(), UserKey, user)
 
-		// Set the user in Fiber's context
-		c.Locals(string(UserKey), user)
-		return c.Next()
-	}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
-// hasValidCookie checks if the session cookie is valid and returns the associated user
-func (m *AuthMiddleware) hasValidCookie(c *fiber.Ctx) (*model.User, bool) {
-	sessionCookie := c.Cookies(m.sessionCookieName)
-	if sessionCookie == "" {
+func (m *AuthMiddleware) hasValidCookie(r *http.Request) (*model.User, bool) {
+	sessionCookie, err := r.Cookie(m.sessionCookieName)
+	if err != nil {
 		return nil, false
 	}
 
-	decodedValue, err := base64.StdEncoding.DecodeString(sessionCookie)
+	decodedValue, err := base64.StdEncoding.DecodeString(sessionCookie.Value)
 	if err != nil {
 		return nil, false
 	}
 
 	splitValue := strings.Split(string(decodedValue), ":")
+
 	if len(splitValue) != 2 {
 		return nil, false
 	}
@@ -87,11 +87,11 @@ func (m *AuthMiddleware) hasValidCookie(c *fiber.Ctx) (*model.User, bool) {
 	return user, true
 }
 
-// GetUser retrieves the authenticated user from the context
-func GetUser(c *fiber.Ctx) *model.User {
-	user := c.Locals(string(UserKey))
+func GetUser(ctx context.Context) *model.User {
+	user := ctx.Value(UserKey)
 	if user == nil {
 		return nil
 	}
+
 	return user.(*model.User)
 }
